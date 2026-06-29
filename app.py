@@ -216,7 +216,7 @@ os.environ["GOOGLE_API_KEY"] = api_key
 # ─────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_llm():
-    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.7, max_output_tokens=2048)
+    return ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_output_tokens=2048)
 
 llm = get_llm()
 
