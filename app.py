@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -197,9 +197,9 @@ st.markdown("""
 # Carregar API Key
 # ─────────────────────────────────────────────
 api_key = (
-    st.secrets.get("GOOGLE_API_KEY", None)
+    st.secrets.get("GROQ_API_KEY", None)
     if hasattr(st, "secrets") else None
-) or os.environ.get("GOOGLE_API_KEY", None)
+) or os.environ.get("GROQ_API_KEY", None)
 
 if not api_key:
     st.markdown("""
@@ -209,14 +209,14 @@ if not api_key:
     """, unsafe_allow_html=True)
     st.stop()
 
-os.environ["GOOGLE_API_KEY"] = api_key
+os.environ["GROQ_API_KEY"] = api_key
 
 # ─────────────────────────────────────────────
 # Modelo
 # ─────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_llm():
-    return ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_output_tokens=2048)
+    return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.7, max_tokens=2048)
 
 llm = get_llm()
 
