@@ -621,6 +621,9 @@ PADROES_PEDIDO_IMAGEM = [
     r'\bimagem\s+de\b',
     r'\bgerar\s+imagem\b',
     r'\bgera\s+(uma\s+)?imagem\b',
+    r'\brecri[ae]\b',
+    r'\brefa[çc]a\s+(a|essa|esta)?\s*imagem\b',
+    r'\btransform[ea]\s+(a|essa|esta)?\s*imagem\b',
 ]
 
 def eh_pedido_de_imagem(texto):
@@ -636,6 +639,14 @@ def gerar_imagem(prompt):
 # ─────────────────────────────────────────────
 # Geração de relatório em PDF
 # ─────────────────────────────────────────────
+def limpar_pensamento(texto):
+    """Remove qualquer bloco de raciocínio interno que eventualmente vaze na resposta"""
+    if not texto:
+        return texto
+    texto = re.sub(r'<think>.*?</think>', '', texto, flags=re.DOTALL | re.IGNORECASE)
+    texto = re.sub(r'<reasoning>.*?</reasoning>', '', texto, flags=re.DOTALL | re.IGNORECASE)
+    return texto.strip()
+
 def gerar_pdf_relatorio(titulo, texto):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -727,11 +738,37 @@ if st.session_state.current_conversation_id:
             with st.spinner(""):
                 is_image_flag = False
                 try:
-                    if not arquivos and eh_pedido_de_imagem(pergunta):
-                        # Pedido de geração de imagem (gratuito, via Pollinations.ai)
+                    pedido_imagem = eh_pedido_de_imagem(pergunta)
+
+                    if pedido_imagem and imagens:
+                        # Recriar/gerar uma nova imagem a partir de uma foto anexada:
+                        # 1) descreve a foto com o modelo de visão, 2) gera a nova imagem
+                        content_msgs = [
+                            {"type": "text", "text": "Descreva esta imagem em detalhes, em inglês, em uma única frase, para ser usada como prompt de um gerador de imagens."}
+                        ]
+                        for img in imagens:
+                            content_msgs.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{img['mime']};base64,{img['data']}"},
+                            })
+                        descricao_resp = groq_client.chat.completions.create(
+                            model=VISION_MODEL,
+                            messages=[{"role": "user", "content": content_msgs}],
+                            reasoning_effort="none",
+                            reasoning_format="hidden",
+                        )
+                        descricao = descricao_resp.choices[0].message.content
+                        prompt_imagem = f"{descricao}. {pergunta}"
+                        url_imagem = gerar_imagem(prompt_imagem)
+                        conteudo = f'<img class="generated-img" src="{url_imagem}">'
+                        is_image_flag = True
+
+                    elif pedido_imagem and not arquivos:
+                        # Pedido de geração de imagem do zero (gratuito, via Pollinations.ai)
                         url_imagem = gerar_imagem(pergunta)
                         conteudo = f'<img class="generated-img" src="{url_imagem}">'
                         is_image_flag = True
+
                     elif imagens:
                         # Caminho com imagem(ns) anexada(s): usa o modelo de visão direto via Groq
                         content_msgs = [{"type": "text", "text": prompt_final}]
@@ -746,6 +783,8 @@ if st.session_state.current_conversation_id:
                                 {"role": "system", "content": SYSTEM_PROMPT},
                                 {"role": "user", "content": content_msgs},
                             ],
+                            reasoning_effort="none",
+                            reasoning_format="hidden",
                         )
                         conteudo = resposta.choices[0].message.content
                     else:
@@ -766,6 +805,9 @@ if st.session_state.current_conversation_id:
                         conteudo = resposta.content
                 except Exception as e:
                     conteudo = f"❌ Erro: {e}"
+
+                if not is_image_flag:
+                    conteudo = limpar_pensamento(conteudo)
 
             st.session_state.messages.append({"role": "assistant", "content": conteudo, "is_image": is_image_flag})
             save_current_conversation()
