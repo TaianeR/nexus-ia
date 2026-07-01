@@ -215,6 +215,29 @@ st.markdown("""
         border-color: #6366f1 !important;
         box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important;
     }
+     [data-testid="stChatInput"] {
+        background: #12122a !important;
+        border-radius: 18px !important;
+    }
+
+    [data-testid="stChatInput"] > div {
+        background: #12122a !important;
+        border: 1px solid #1e1e3f !important;
+        border-radius: 18px !important;
+    }
+
+    [data-testid="stChatInputSubmitButton"] {
+        background: #1e1e3f !important;
+        border-radius: 12px !important;
+    }
+
+    [data-testid="stChatInputSubmitButton"]:hover {
+        background: #6366f1 !important;
+    }
+
+    [data-testid="stChatInputSubmitButton"] svg {
+        fill: #cbd5e1 !important;
+    }
 
     .stSpinner > div { border-top-color: #8b5cf6 !important; }
 
