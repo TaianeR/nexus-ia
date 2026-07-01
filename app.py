@@ -69,34 +69,6 @@ st.markdown("""
         object-fit: cover;
     }
 
-    .sidebar-menu {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        margin-bottom: 2rem;
-    }
-
-    .menu-button {
-        background: #0f1434;
-        border: 1px solid #1e1e3f;
-        color: #94a3b8;
-        padding: 12px 16px;
-        border-radius: 12px;
-        font-size: 0.9rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        text-align: left;
-        width: 100%;
-        font-family: 'Inter', sans-serif;
-    }
-
-    .menu-button:hover {
-        background: #1a1f3a;
-        border-color: #6366f1;
-        color: #cbd5e1;
-    }
-
     .conversation-item {
         background: #0f1434;
         border: 1px solid #1e1e3f;
@@ -120,13 +92,6 @@ st.markdown("""
         background: #1a1f3a;
         border-color: #6366f1;
         color: #cbd5e1;
-    }
-
-    .conversation-item.active {
-        background: linear-gradient(135deg, #312e81, #3730a3);
-        border-color: #4338ca;
-        color: #eef2ff;
-        font-weight: 600;
     }
 
     .block-container {
@@ -274,15 +239,6 @@ st.markdown("""
         background: rgba(99, 102, 241, 0.2);
     }
 
-    .chat-container {
-        background: linear-gradient(180deg, #0a0e27 0%, #0f1434 100%);
-        border-radius: 16px;
-        border: 1px solid #1e1e3f;
-        padding: 1.5rem;
-        max-width: 900px;
-        margin: 0 auto;
-    }
-
     .history-header {
         font-size: 0.75rem;
         font-weight: 600;
@@ -351,7 +307,6 @@ def save_current_conversation():
                 "created_at": datetime.now().isoformat(),
             }
         
-        # Atualizar título baseado na primeira mensagem
         if st.session_state.messages and st.session_state.conversations[st.session_state.current_conversation_id]["title"] == "Nova conversa":
             first_msg = next((m["content"] for m in st.session_state.messages if m["role"] == "user"), "Nova conversa")
             st.session_state.conversations[st.session_state.current_conversation_id]["title"] = first_msg[:50] + "..." if len(first_msg) > 50 else first_msg
@@ -377,15 +332,11 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    # Menu Principal
-    st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
+    st.divider()
     
-    col1, col2 = st.columns([0.85, 0.15])
-    with col1:
-        if st.button("➕ Nova Conversa", use_container_width=True):
-            create_new_conversation()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Nova Conversa
+    if st.button("➕ Nova Conversa", use_container_width=True):
+        create_new_conversation()
     
     st.divider()
     
@@ -393,7 +344,6 @@ with st.sidebar:
     st.markdown("<div class='history-header'>📋 Histórico</div>", unsafe_allow_html=True)
     
     if st.session_state.conversations:
-        # Ordenar conversas por data decrescente
         sorted_conversations = sorted(
             st.session_state.conversations.items(),
             key=lambda x: x[1].get("created_at", ""),
@@ -454,7 +404,8 @@ with col2:
 if not api_key:
     st.markdown("""
     <div style='text-align:center; padding: 2rem; color:#64748b;'>
-        ⚠️ Sistema em configuração. Tente novamente em breve.
+        ⚠️ Configure sua API Key do Groq.<br>
+        Defina a variável GROQ_API_KEY no seu sistema.
     </div>
     """, unsafe_allow_html=True)
     st.stop()
