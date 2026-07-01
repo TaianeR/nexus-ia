@@ -314,12 +314,9 @@ def save_current_conversation():
         st.session_state.conversations[st.session_state.current_conversation_id]["messages"] = st.session_state.messages
 
 # ─────────────────────────────────────────────
-# Carregar API Key
+# Carregar API Key (prioriza variável de ambiente)
 # ─────────────────────────────────────────────
-api_key = (
-    st.secrets.get("GROQ_API_KEY", None)
-    if hasattr(st, "secrets") else None
-) or os.environ.get("GROQ_API_KEY", None)
+api_key = os.environ.get("GROQ_API_KEY", None)
 
 # ─────────────────────────────────────────────
 # Sidebar
@@ -405,12 +402,13 @@ if not api_key:
     st.markdown("""
     <div style='text-align:center; padding: 2rem; color:#64748b;'>
         ⚠️ Configure sua API Key do Groq.<br>
-        Defina a variável GROQ_API_KEY no seu sistema.
+        Execute no PowerShell:<br>
+        <code style='background:#0f0f1e; padding:10px; border-radius:5px;'>
+        $env:GROQ_API_KEY="sua-chave-aqui"
+        </code>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
-
-os.environ["GROQ_API_KEY"] = api_key
 
 # ─────────────────────────────────────────────
 # Modelo
