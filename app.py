@@ -44,7 +44,8 @@ st.markdown("""
         width: 72px;
         height: 72px;
         border-radius: 20px;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+        overflow: hidden;
+        background: #0f0f1e;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -187,7 +188,7 @@ st.markdown("""
 # ─────────────────────────────────────────────
 st.markdown("""
 <div class="nexus-hero">
-    <div class="nexus-logo">✦</div>
+    <div class="nexus-logo"><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
     <h1 class="nexus-title">Nexus IA</h1>
     <p class="nexus-subtitle">Inteligência Artificial · Sempre pronto para te ajudar</p>
 </div>
