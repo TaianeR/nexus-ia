@@ -101,7 +101,7 @@ st.markdown("""
     .block-container {
         padding-top: 1rem;
         padding-bottom: 5rem;
-        max-width: 1200px;
+        max-width: 1600px;
     }
 
     .nexus-hero {
@@ -186,7 +186,7 @@ st.markdown("""
     .bubble {
         padding: 13px 18px;
         border-radius: 18px;
-        max-width: 70%;
+        max-width: 85%;
         font-size: 0.925rem;
         line-height: 1.7;
         word-wrap: break-word;
@@ -468,7 +468,7 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 # Main Content
 # ─────────────────────────────────────────────
-col1, col2, col3 = st.columns([1, 2, 1])
+col1, col2, col3 = st.columns([1, 5, 1])
 
 with col2:
     if not st.session_state.current_conversation_id:
