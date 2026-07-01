@@ -266,6 +266,34 @@ st.markdown("""
         fill: #cbd5e1 !important;
     }
 
+    [data-testid="stChatInput"] *:focus,
+    [data-testid="stChatInput"] *:focus-visible,
+    [data-testid="stChatInput"] *:focus-within {
+        outline: none !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stChatInput"] textarea:focus {
+        box-shadow: 0 0 0 2px rgba(99,102,241,0.35) !important;
+    }
+
+    [data-testid="stBaseButton-headerNoPadding"],
+    [data-testid="stChatInputFileUploadButton"],
+    [data-testid="stChatInput"] button[kind="headerNoPadding"] {
+        background: transparent !important;
+    }
+
+    [data-testid="stChatInputFileUploadButton"] svg,
+    [data-testid="stChatInput"] button svg {
+        fill: #94a3b8 !important;
+        color: #94a3b8 !important;
+    }
+
+    [data-testid="stChatInputFileUploadButton"]:hover svg {
+        fill: #a78bfa !important;
+        color: #a78bfa !important;
+    }
+
     .stSpinner > div { border-top-color: #8b5cf6 !important; }
 
     .stButton > button {
@@ -477,7 +505,7 @@ if not api_key:
 # ─────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_llm():
-    return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.7, max_tokens=2048)
+    return ChatGroq(model="openai/gpt-oss-120b", temperature=0.7, max_tokens=2048)
 
 @st.cache_resource(show_spinner=False)
 def get_groq_client():
