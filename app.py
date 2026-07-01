@@ -1,5 +1,7 @@
 import os
+import json
 import streamlit as st
+from datetime import datetime
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
@@ -10,7 +12,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 st.set_page_config(
     page_title="Nexus IA – Seu Assistente Inteligente",
     page_icon="✦",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
@@ -22,24 +24,78 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
     html, body, .stApp {
-        background: #080810;
+        background: #0a0e27;
         font-family: 'Inter', sans-serif;
         color: #e2e8f0;
     }
 
     #MainMenu, footer { visibility: hidden; }
-[data-testid="stHeader"] { background: transparent; }
-[data-testid="stToolbar"] { visibility: hidden; }
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stToolbar"] { visibility: hidden; }
+
+    /* ─── Sidebar Styling ─── */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f1434 0%, #0a0e27 100%);
+        border-right: 1px solid #1e1e3f;
+    }
+
+    [data-testid="stSidebarContent"] {
+        padding: 1.5rem 0.5rem;
+    }
+
+    .sidebar-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #a78bfa, #818cf8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+
+    .conversation-item {
+        background: #0f1434;
+        border: 1px solid #1e1e3f;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.85rem;
+        color: #94a3b8;
+        line-height: 1.3;
+        max-height: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .conversation-item:hover {
+        background: #1a1f3a;
+        border-color: #6366f1;
+        color: #cbd5e1;
+    }
+
+    .conversation-item.active {
+        background: linear-gradient(135deg, #312e81, #3730a3);
+        border-color: #4338ca;
+        color: #eef2ff;
+        font-weight: 600;
+    }
 
     .block-container {
-        padding-top: 0rem;
+        padding-top: 1rem;
         padding-bottom: 5rem;
-        max-width: 780px;
+        max-width: 1200px;
     }
 
     .nexus-hero {
         text-align: center;
-        padding: 2.5rem 1rem 1.5rem 1rem;
+        padding: 2rem 1rem 1rem 1rem;
+        margin-bottom: 1.5rem;
     }
 
     .nexus-logo {
@@ -63,7 +119,7 @@ st.markdown("""
     }
 
     .nexus-title {
-        font-size: 2.4rem;
+        font-size: 2.2rem;
         font-weight: 800;
         letter-spacing: -0.03em;
         background: linear-gradient(90deg, #a78bfa, #818cf8, #38bdf8, #34d399);
@@ -122,9 +178,10 @@ st.markdown("""
     .bubble {
         padding: 13px 18px;
         border-radius: 18px;
-        max-width: 82%;
+        max-width: 70%;
         font-size: 0.925rem;
         line-height: 1.7;
+        word-wrap: break-word;
     }
 
     .bubble-nexus {
@@ -167,6 +224,14 @@ st.markdown("""
         font-size: 0.82rem;
         color: #94a3b8;
         margin: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .suggestion-chip:hover {
+        border-color: #6366f1;
+        color: #a78bfa;
+        background: rgba(99, 102, 241, 0.1);
     }
 
     .stButton > button {
@@ -175,35 +240,104 @@ st.markdown("""
         color: #64748b !important;
         border-radius: 10px;
         font-size: 0.82rem;
-        padding: 6px 14px;
+        padding: 8px 16px;
         transition: all 0.2s;
+        width: 100%;
     }
+
     .stButton > button:hover {
         border-color: #6366f1;
         color: #a78bfa !important;
+        background: rgba(99, 102, 241, 0.1);
+    }
+
+    .stButton > button:active {
+        background: rgba(99, 102, 241, 0.2);
+    }
+
+    .chat-container {
+        background: linear-gradient(180deg, #0a0e27 0%, #0f1434 100%);
+        border-radius: 16px;
+        border: 1px solid #1e1e3f;
+        padding: 1.5rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .history-header {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+        padding: 0 0.5rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #475569;
+        font-size: 0.9rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# Hero Header
+# Gerenciamento de Sessão
 # ─────────────────────────────────────────────
-st.markdown("""
-<div class="nexus-hero">
-    <div class="nexus-logo"><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
-    <h1 class="nexus-title">Nexus IA</h1>
-    <p class="nexus-subtitle">Inteligência Artificial · Sempre pronto para te ajudar</p>
-</div>
-""", unsafe_allow_html=True)
-with st.sidebar:
-    st.markdown("### ✦ Nexus IA")
-    st.caption("Seu assistente inteligente")
-    st.divider()
-    if st.button("🗑️ Nova conversa", use_container_width=True):
-        st.session_state.messages = []
+if "conversations" not in st.session_state:
+    st.session_state.conversations = {}
+    st.session_state.current_conversation_id = None
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+def create_new_conversation():
+    """Criar nova conversa"""
+    conversation_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.session_state.conversations[conversation_id] = {
+        "title": "Nova conversa",
+        "messages": [],
+        "created_at": datetime.now().isoformat(),
+    }
+    st.session_state.current_conversation_id = conversation_id
+    st.session_state.messages = []
+    st.rerun()
+
+def load_conversation(conversation_id):
+    """Carregar conversa existente"""
+    if conversation_id in st.session_state.conversations:
+        st.session_state.current_conversation_id = conversation_id
+        st.session_state.messages = st.session_state.conversations[conversation_id].get("messages", [])
         st.rerun()
-    st.divider()
-    st.caption("Desenvolvido com Streamlit + Groq")
+
+def delete_conversation(conversation_id):
+    """Deletar conversa"""
+    if conversation_id in st.session_state.conversations:
+        del st.session_state.conversations[conversation_id]
+        if st.session_state.current_conversation_id == conversation_id:
+            st.session_state.current_conversation_id = None
+            st.session_state.messages = []
+        st.rerun()
+
+def save_current_conversation():
+    """Salvar conversa atual"""
+    if st.session_state.current_conversation_id:
+        if st.session_state.current_conversation_id not in st.session_state.conversations:
+            st.session_state.conversations[st.session_state.current_conversation_id] = {
+                "title": "Nova conversa",
+                "messages": [],
+                "created_at": datetime.now().isoformat(),
+            }
+        
+        # Atualizar título baseado na primeira mensagem
+        if st.session_state.messages and st.session_state.conversations[st.session_state.current_conversation_id]["title"] == "Nova conversa":
+            first_msg = next((m["content"] for m in st.session_state.messages if m["role"] == "user"), "Nova conversa")
+            st.session_state.conversations[st.session_state.current_conversation_id]["title"] = first_msg[:50] + "..." if len(first_msg) > 50 else first_msg
+        
+        st.session_state.conversations[st.session_state.current_conversation_id]["messages"] = st.session_state.messages
 
 # ─────────────────────────────────────────────
 # Carregar API Key
@@ -213,6 +347,76 @@ api_key = (
     if hasattr(st, "secrets") else None
 ) or os.environ.get("GROQ_API_KEY", None)
 
+# ─────────────────────────────────────────────
+# Sidebar
+# ─────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("<div class='sidebar-title'>✦ Nexus IA</div>", unsafe_allow_html=True)
+    
+    # Botão nova conversa
+    if st.button("➕ Nova Conversa", use_container_width=True):
+        create_new_conversation()
+    
+    st.divider()
+    
+    # Histórico de conversas
+    if st.session_state.conversations:
+        st.markdown("<div class='history-header'>📋 Histórico</div>", unsafe_allow_html=True)
+        
+        # Ordenar conversas por data decrescente
+        sorted_conversations = sorted(
+            st.session_state.conversations.items(),
+            key=lambda x: x[1].get("created_at", ""),
+            reverse=True
+        )
+        
+        for conv_id, conv_data in sorted_conversations:
+            col1, col2 = st.columns([0.85, 0.15])
+            
+            with col1:
+                is_active = conv_id == st.session_state.current_conversation_id
+                active_class = "active" if is_active else ""
+                if st.button(
+                    f"💬 {conv_data['title']}",
+                    key=f"conv_{conv_id}",
+                    use_container_width=True,
+                ):
+                    load_conversation(conv_id)
+            
+            with col2:
+                if st.button("🗑️", key=f"del_{conv_id}", help="Deletar"):
+                    delete_conversation(conv_id)
+    else:
+        st.markdown("<div class='empty-state'>Nenhuma conversa ainda.<br>Comece uma nova! 👋</div>", unsafe_allow_html=True)
+    
+    st.divider()
+    st.caption("🚀 Desenvolvido com Streamlit + Groq")
+
+# ─────────────────────────────────────────────
+# Main Content
+# ─────────────────────────────────────────────
+col1, col2, col3 = st.columns([1, 2, 1])
+
+with col2:
+    if not st.session_state.current_conversation_id:
+        # Hero Header
+        st.markdown("""
+        <div class="nexus-hero">
+            <div class="nexus-logo"><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
+            <h1 class="nexus-title">Nexus IA</h1>
+            <p class="nexus-subtitle">Inteligência Artificial · Sempre pronto para te ajudar</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Criar primeira conversa
+        if st.button("Começar Conversa", use_container_width=True, key="start_conv"):
+            create_new_conversation()
+    else:
+        st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# Validar API Key
+# ─────────────────────────────────────────────
 if not api_key:
     st.markdown("""
     <div style='text-align:center; padding: 2rem; color:#64748b;'>
@@ -239,85 +443,79 @@ redação, análise, programação, dúvidas do dia a dia e muito mais.
 Seja direto, útil e use uma linguagem acessível. Use emojis com moderação quando ficarem naturais."""
 
 # ─────────────────────────────────────────────
-# Histórico
+# Chat Interface
 # ─────────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Sugestões iniciais
-if not st.session_state.messages:
-    st.markdown("""
-    <div style='text-align:center; padding: 1rem 0 0.5rem 0; color:#334155; font-size:0.85rem; letter-spacing:0.05em;'>
-        EXPERIMENTE PERGUNTAR
-    </div>
-    <div style='text-align:center; margin-bottom: 1.5rem;'>
-        <span class='suggestion-chip'>✍️ Escreva um texto para mim</span>
-        <span class='suggestion-chip'>💡 Me dê uma ideia criativa</span>
-        <span class='suggestion-chip'>🔧 Ajude com tecnologia</span>
-        <span class='suggestion-chip'>📚 Explique um conceito</span>
-        <span class='suggestion-chip'>🌍 Traduza algo</span>
-        <span class='suggestion-chip'>🤔 Me aconselhe</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Renderizar histórico
-for msg in st.session_state.messages:
-    if msg["role"] == "user":
-        st.markdown(f"""
-        <div class='message-row user'>
-            <div class='avatar avatar-user'>👤</div>
-            <div class='bubble bubble-user'>{msg['content']}</div>
-        </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class='message-row nexus'>
-            <div class='avatar avatar-nexus'>✦</div>
-            <div class='bubble bubble-nexus'>{msg['content']}</div>
-        </div>""", unsafe_allow_html=True)
-
-# Botão limpar
-if st.session_state.messages:
-    col1, col2, col3 = st.columns([4, 2, 4])
+if st.session_state.current_conversation_id:
     with col2:
-        if st.button("🗑️ Nova conversa", key="clear"):
-            st.session_state.messages = []
+        # Sugestões iniciais
+        if not st.session_state.messages:
+            st.markdown("""
+            <div style='text-align:center; padding: 1rem 0 1.5rem 0; color:#334155; font-size:0.85rem; letter-spacing:0.05em;'>
+                EXPERIMENTE PERGUNTAR
+            </div>
+            <div style='text-align:center; margin-bottom: 2rem;'>
+                <span class='suggestion-chip'>✍️ Escreva um texto para mim</span><br>
+                <span class='suggestion-chip'>💡 Me dê uma ideia criativa</span><br>
+                <span class='suggestion-chip'>🔧 Ajude com tecnologia</span><br>
+                <span class='suggestion-chip'>📚 Explique um conceito</span><br>
+                <span class='suggestion-chip'>🌍 Traduza algo</span><br>
+                <span class='suggestion-chip'>🤔 Me aconselhe</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Renderizar histórico
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                st.markdown(f"""
+                <div class='message-row user'>
+                    <div class='avatar avatar-user'>👤</div>
+                    <div class='bubble bubble-user'>{msg['content']}</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class='message-row nexus'>
+                    <div class='avatar avatar-nexus'>✦</div>
+                    <div class='bubble bubble-nexus'>{msg['content']}</div>
+                </div>""", unsafe_allow_html=True)
+
+        # Input
+        pergunta = st.chat_input("Pergunte qualquer coisa ao Nexus IA...", key="input")
+
+        if pergunta:
+            st.session_state.messages.append({"role": "user", "content": pergunta})
+            st.markdown(f"""
+            <div class='message-row user'>
+                <div class='avatar avatar-user'>👤</div>
+                <div class='bubble bubble-user'>{pergunta}</div>
+            </div>""", unsafe_allow_html=True)
+
+            historico = []
+            for msg in st.session_state.messages[:-1]:
+                if msg["role"] == "user":
+                    historico.append(HumanMessage(content=msg["content"]))
+                else:
+                    historico.append(AIMessage(content=msg["content"]))
+
+            with st.spinner(""):
+                chain = ChatPromptTemplate.from_messages([
+                    ("system", SYSTEM_PROMPT),
+                    MessagesPlaceholder(variable_name="history"),
+                    ("human", "{question}"),
+                ]) | llm
+                try:
+                    resposta = chain.invoke({"history": historico, "question": pergunta})
+                    conteudo = resposta.content
+                except Exception as e:
+                    conteudo = f"❌ Erro: {e}"
+
+            st.session_state.messages.append({"role": "assistant", "content": conteudo})
+            save_current_conversation()
+            st.markdown(f"""
+            <div class='message-row nexus'>
+                <div class='avatar avatar-nexus'>✦</div>
+                <div class='bubble bubble-nexus'>{conteudo}</div>
+            </div>""", unsafe_allow_html=True)
             st.rerun()
-
-# ─────────────────────────────────────────────
-# Input
-# ─────────────────────────────────────────────
-pergunta = st.chat_input("Pergunte qualquer coisa ao Nexus IA...", key="input")
-
-if pergunta:
-    st.session_state.messages.append({"role": "user", "content": pergunta})
-    st.markdown(f"""
-    <div class='message-row user'>
-        <div class='avatar avatar-user'>👤</div>
-        <div class='bubble bubble-user'>{pergunta}</div>
-    </div>""", unsafe_allow_html=True)
-
-    historico = []
-    for msg in st.session_state.messages[:-1]:
-        if msg["role"] == "user":
-            historico.append(HumanMessage(content=msg["content"]))
-        else:
-            historico.append(AIMessage(content=msg["content"]))
-
-    with st.spinner(""):
-        chain = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}"),
-        ]) | llm
-        try:
-            resposta = chain.invoke({"history": historico, "question": pergunta})
-            conteudo = resposta.content
-        except Exception as e:
-            conteudo = f"❌ Erro: {e}"
-
-    st.session_state.messages.append({"role": "assistant", "content": conteudo})
-    st.markdown(f"""
-    <div class='message-row nexus'>
-        <div class='avatar avatar-nexus'>✦</div>
-        <div class='bubble bubble-nexus'>{conteudo}</div>
-    </div>""", unsafe_allow_html=True)
+        
+        # Salvar conversa ao mudar
+        save_current_conversation()
