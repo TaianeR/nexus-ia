@@ -27,7 +27,9 @@ st.markdown("""
         color: #e2e8f0;
     }
 
-    #MainMenu, header, footer { visibility: hidden; }
+    #MainMenu, footer { visibility: hidden; }
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stToolbar"] { visibility: hidden; }
 
     .block-container {
         padding-top: 0rem;
