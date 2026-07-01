@@ -1,6 +1,9 @@
 import os
 import json
 import base64
+import io
+import re
+import urllib.parse
 import streamlit as st
 from datetime import datetime
 from groq import Groq
@@ -9,6 +12,10 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from pypdf import PdfReader
 from docx import Document as DocxDocument
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
 # ─────────────────────────────────────────────
 # Configuração da Página
@@ -225,6 +232,32 @@ st.markdown("""
         padding: 6px 12px;
         margin-bottom: 8px;
         font-size: 0.8rem;
+    }
+
+    .generated-img {
+        max-width: 100%;
+        width: 380px;
+        border-radius: 14px;
+        margin-bottom: 4px;
+        display: block;
+        border: 1px solid #1e1e3f;
+    }
+
+    [data-testid="stDownloadButton"] button {
+        background: transparent !important;
+        border: 1px solid #1e1e3f !important;
+        color: #94a3b8 !important;
+        border-radius: 10px !important;
+        font-size: 0.78rem !important;
+        padding: 4px 12px !important;
+        margin-top: -8px;
+        margin-bottom: 12px;
+    }
+
+    [data-testid="stDownloadButton"] button:hover {
+        border-color: #6366f1 !important;
+        color: #a78bfa !important;
+        background: rgba(99, 102, 241, 0.1) !important;
     }
 
     [data-testid="stChatInput"] textarea {
@@ -581,12 +614,59 @@ def processar_arquivos(arquivos):
     return imagens, textos_extraidos, anexos_display
 
 # ─────────────────────────────────────────────
+# Geração de imagens (serviço gratuito, sem chave de API)
+# ─────────────────────────────────────────────
+PADROES_PEDIDO_IMAGEM = [
+    r'\b(crie?|gere?|desenh[ae]|fa[çc]a|cri[ae])\s+(uma|um)?\s*imagem\b',
+    r'\bimagem\s+de\b',
+    r'\bgerar\s+imagem\b',
+    r'\bgera\s+(uma\s+)?imagem\b',
+]
+
+def eh_pedido_de_imagem(texto):
+    texto_lower = (texto or "").lower()
+    return any(re.search(p, texto_lower) for p in PADROES_PEDIDO_IMAGEM)
+
+def gerar_imagem(prompt):
+    """Gera uma imagem gratuitamente via Pollinations.ai (sem necessidade de chave de API)"""
+    prompt_encoded = urllib.parse.quote(prompt.strip()[:500])
+    semente = datetime.now().strftime("%H%M%S")
+    return f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=768&height=768&nologo=true&seed={semente}"
+
+# ─────────────────────────────────────────────
+# Geração de relatório em PDF
+# ─────────────────────────────────────────────
+def gerar_pdf_relatorio(titulo, texto):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=2 * cm, bottomMargin=2 * cm,
+        leftMargin=2 * cm, rightMargin=2 * cm,
+    )
+    estilos = getSampleStyleSheet()
+    elementos = [Paragraph(titulo, estilos["Title"]), Spacer(1, 14)]
+
+    texto_limpo = re.sub(r'<[^>]+>', '', texto or "")
+    for paragrafo in texto_limpo.split("\n"):
+        paragrafo = paragrafo.strip()
+        if paragrafo:
+            paragrafo_seguro = (
+                paragrafo.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+            elementos.append(Paragraph(paragrafo_seguro, estilos["Normal"]))
+            elementos.append(Spacer(1, 8))
+
+    doc.build(elementos)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+# ─────────────────────────────────────────────
 # Chat Interface
 # ─────────────────────────────────────────────
 if st.session_state.current_conversation_id:
     with col2:
         # Renderizar histórico
-        for msg in st.session_state.messages:
+        for idx_msg, msg in enumerate(st.session_state.messages):
             anexos_html = render_attachments(msg.get("attachments"))
             if msg["role"] == "user":
                 st.markdown(f"""
@@ -600,6 +680,15 @@ if st.session_state.current_conversation_id:
                     <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
                     <div class='bubble bubble-nexus'>{anexos_html}{msg['content']}</div>
                 </div>""", unsafe_allow_html=True)
+                if not msg.get("is_image") and msg.get("content"):
+                    pdf_bytes = gerar_pdf_relatorio("Relatório - Nexus IA", msg["content"])
+                    st.download_button(
+                        "📥 Baixar como PDF",
+                        data=pdf_bytes,
+                        file_name=f"relatorio_nexus_{idx_msg}.pdf",
+                        mime="application/pdf",
+                        key=f"pdf_hist_{idx_msg}",
+                    )
 
         # Input (com suporte a anexar fotos e documentos)
         entrada = st.chat_input(
@@ -636,9 +725,15 @@ if st.session_state.current_conversation_id:
                 prompt_final = "Descreva o que você vê." if imagens else "Analise o conteúdo enviado."
 
             with st.spinner(""):
+                is_image_flag = False
                 try:
-                    if imagens:
-                        # Caminho com imagem(ns): usa o modelo de visão direto via Groq
+                    if not arquivos and eh_pedido_de_imagem(pergunta):
+                        # Pedido de geração de imagem (gratuito, via Pollinations.ai)
+                        url_imagem = gerar_imagem(pergunta)
+                        conteudo = f'<img class="generated-img" src="{url_imagem}">'
+                        is_image_flag = True
+                    elif imagens:
+                        # Caminho com imagem(ns) anexada(s): usa o modelo de visão direto via Groq
                         content_msgs = [{"type": "text", "text": prompt_final}]
                         for img in imagens:
                             content_msgs.append({
@@ -672,13 +767,22 @@ if st.session_state.current_conversation_id:
                 except Exception as e:
                     conteudo = f"❌ Erro: {e}"
 
-            st.session_state.messages.append({"role": "assistant", "content": conteudo})
+            st.session_state.messages.append({"role": "assistant", "content": conteudo, "is_image": is_image_flag})
             save_current_conversation()
             st.markdown(f"""
             <div class='message-row nexus'>
                 <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
                 <div class='bubble bubble-nexus'>{conteudo}</div>
             </div>""", unsafe_allow_html=True)
+            if not is_image_flag:
+                pdf_bytes_novo = gerar_pdf_relatorio("Relatório - Nexus IA", conteudo)
+                st.download_button(
+                    "📥 Baixar como PDF",
+                    data=pdf_bytes_novo,
+                    file_name="relatorio_nexus_novo.pdf",
+                    mime="application/pdf",
+                    key="pdf_novo",
+                )
             st.rerun()
         
         # Salvar conversa ao mudar
