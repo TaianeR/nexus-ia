@@ -1,10 +1,14 @@
 import os
 import json
+import base64
 import streamlit as st
 from datetime import datetime
+from groq import Groq
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
+from pypdf import PdfReader
+from docx import Document as DocxDocument
 
 # ─────────────────────────────────────────────
 # Configuração da Página
@@ -166,10 +170,11 @@ st.markdown("""
         justify-content: center;
         font-size: 1rem;
         flex-shrink: 0;
+        overflow: hidden;
     }
 
     .avatar-nexus {
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: #0f0f1e;
         box-shadow: 0 0 12px rgba(139,92,246,0.5);
     }
 
@@ -201,6 +206,27 @@ st.markdown("""
         color: #eef2ff;
     }
 
+    .attachment-img {
+        max-width: 220px;
+        max-height: 220px;
+        border-radius: 12px;
+        margin-bottom: 8px;
+        display: block;
+        object-fit: cover;
+    }
+
+    .attachment-doc {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(0,0,0,0.2);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 10px;
+        padding: 6px 12px;
+        margin-bottom: 8px;
+        font-size: 0.8rem;
+    }
+
     [data-testid="stChatInput"] textarea {
         background: #0f0f1e !important;
         border: 1px solid #1e1e3f !important;
@@ -215,7 +241,8 @@ st.markdown("""
         border-color: #6366f1 !important;
         box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important;
     }
-     [data-testid="stChatInput"] {
+
+    [data-testid="stChatInput"] {
         background: #12122a !important;
         border-radius: 18px !important;
     }
@@ -331,10 +358,22 @@ def save_current_conversation():
             }
         
         if st.session_state.messages and st.session_state.conversations[st.session_state.current_conversation_id]["title"] == "Nova conversa":
-            first_msg = next((m["content"] for m in st.session_state.messages if m["role"] == "user"), "Nova conversa")
+            first_msg = next((m["content"] for m in st.session_state.messages if m["role"] == "user" and m.get("content")), "Nova conversa")
             st.session_state.conversations[st.session_state.current_conversation_id]["title"] = first_msg[:50] + "..." if len(first_msg) > 50 else first_msg
         
         st.session_state.conversations[st.session_state.current_conversation_id]["messages"] = st.session_state.messages
+
+def render_attachments(attachments):
+    """Gera o HTML dos anexos (imagens e documentos) de uma mensagem"""
+    if not attachments:
+        return ""
+    html = ""
+    for a in attachments:
+        if a["tipo"] == "imagem":
+            html += f'<img class="attachment-img" src="data:{a["mime"]};base64,{a["data"]}">'
+        else:
+            html += f'<div class="attachment-doc">📄 {a["nome"]}</div>'
+    return html
 
 # ─────────────────────────────────────────────
 # Carregar API Key (prioriza variável de ambiente)
@@ -434,13 +473,21 @@ if not api_key:
     st.stop()
 
 # ─────────────────────────────────────────────
-# Modelo
+# Modelos
 # ─────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_llm():
     return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.7, max_tokens=2048)
 
+@st.cache_resource(show_spinner=False)
+def get_groq_client():
+    return Groq(api_key=api_key)
+
 llm = get_llm()
+groq_client = get_groq_client()
+
+# Modelo com suporte a visão (fotos)
+VISION_MODEL = "qwen/qwen3.6-27b"
 
 SYSTEM_PROMPT = """Você é o Nexus IA, um assistente de inteligência artificial avançado, inteligente e amigável.
 Responda sempre em português do Brasil, de forma clara, natural e envolvente.
@@ -449,52 +496,151 @@ redação, análise, programação, dúvidas do dia a dia e muito mais.
 Seja direto, útil e use uma linguagem acessível. Use emojis com moderação quando ficarem naturais."""
 
 # ─────────────────────────────────────────────
+# Funções de extração de arquivos
+# ─────────────────────────────────────────────
+def extrair_texto_pdf(arquivo):
+    try:
+        leitor = PdfReader(arquivo)
+        paginas = [p.extract_text() or "" for p in leitor.pages]
+        return "\n".join(paginas).strip()
+    except Exception:
+        return ""
+
+def extrair_texto_docx(arquivo):
+    try:
+        doc = DocxDocument(arquivo)
+        return "\n".join(p.text for p in doc.paragraphs).strip()
+    except Exception:
+        return ""
+
+def processar_arquivos(arquivos):
+    """Separa os arquivos enviados em imagens (base64) e textos extraídos de documentos"""
+    imagens = []
+    textos_extraidos = []
+    anexos_display = []
+
+    for arquivo in arquivos:
+        nome = arquivo.name
+        tipo = arquivo.type or ""
+
+        if tipo.startswith("image/"):
+            bytes_img = arquivo.read()
+            b64 = base64.b64encode(bytes_img).decode("utf-8")
+            imagens.append({"mime": tipo, "data": b64})
+            anexos_display.append({"tipo": "imagem", "nome": nome, "data": b64, "mime": tipo})
+
+        elif nome.lower().endswith(".pdf"):
+            conteudo = extrair_texto_pdf(arquivo)
+            if conteudo:
+                textos_extraidos.append(f"[Conteúdo do arquivo '{nome}']:\n{conteudo[:8000]}")
+            anexos_display.append({"tipo": "documento", "nome": nome})
+
+        elif nome.lower().endswith(".docx"):
+            conteudo = extrair_texto_docx(arquivo)
+            if conteudo:
+                textos_extraidos.append(f"[Conteúdo do arquivo '{nome}']:\n{conteudo[:8000]}")
+            anexos_display.append({"tipo": "documento", "nome": nome})
+
+        elif nome.lower().endswith(".txt"):
+            conteudo = arquivo.read().decode("utf-8", errors="ignore")
+            if conteudo:
+                textos_extraidos.append(f"[Conteúdo do arquivo '{nome}']:\n{conteudo[:8000]}")
+            anexos_display.append({"tipo": "documento", "nome": nome})
+
+        else:
+            anexos_display.append({"tipo": "documento", "nome": nome})
+
+    return imagens, textos_extraidos, anexos_display
+
+# ─────────────────────────────────────────────
 # Chat Interface
 # ─────────────────────────────────────────────
 if st.session_state.current_conversation_id:
     with col2:
         # Renderizar histórico
         for msg in st.session_state.messages:
+            anexos_html = render_attachments(msg.get("attachments"))
             if msg["role"] == "user":
                 st.markdown(f"""
                 <div class='message-row user'>
                     <div class='avatar avatar-user'>👤</div>
-                    <div class='bubble bubble-user'>{msg['content']}</div>
+                    <div class='bubble bubble-user'>{anexos_html}{msg['content']}</div>
                 </div>""", unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                 <div class='message-row nexus'>
-                    <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
-                    <div class='bubble bubble-nexus'>{msg['content']}</div>
+                    <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
+                    <div class='bubble bubble-nexus'>{anexos_html}{msg['content']}</div>
                 </div>""", unsafe_allow_html=True)
 
-        # Input
-        pergunta = st.chat_input("Pergunte qualquer coisa ao Nexus IA...", key="input")
+        # Input (com suporte a anexar fotos e documentos)
+        entrada = st.chat_input(
+            "Pergunte qualquer coisa ao Nexus IA...",
+            accept_file="multiple",
+            file_type=["png", "jpg", "jpeg", "webp", "pdf", "docx", "txt"],
+            key="input",
+        )
 
-        if pergunta:
-            st.session_state.messages.append({"role": "user", "content": pergunta})
+        if entrada:
+            pergunta = entrada.text or ""
+            arquivos = entrada.files or []
+
+            imagens, textos_extraidos, anexos_display = processar_arquivos(arquivos)
+
+            # Mostrar mensagem do usuário (com anexos)
+            st.session_state.messages.append({
+                "role": "user",
+                "content": pergunta,
+                "attachments": anexos_display,
+            })
+            anexos_html_novo = render_attachments(anexos_display)
             st.markdown(f"""
             <div class='message-row user'>
                 <div class='avatar avatar-user'>👤</div>
-                <div class='bubble bubble-user'>{pergunta}</div>
+                <div class='bubble bubble-user'>{anexos_html_novo}{pergunta}</div>
             </div>""", unsafe_allow_html=True)
 
-            historico = []
-            for msg in st.session_state.messages[:-1]:
-                if msg["role"] == "user":
-                    historico.append(HumanMessage(content=msg["content"]))
-                else:
-                    historico.append(AIMessage(content=msg["content"]))
+            # Montar o texto final (pergunta + conteúdo extraído de documentos)
+            prompt_final = pergunta
+            if textos_extraidos:
+                prompt_final = (prompt_final + "\n\n" + "\n\n".join(textos_extraidos)).strip()
+            if not prompt_final:
+                prompt_final = "Descreva o que você vê." if imagens else "Analise o conteúdo enviado."
 
             with st.spinner(""):
-                chain = ChatPromptTemplate.from_messages([
-                    ("system", SYSTEM_PROMPT),
-                    MessagesPlaceholder(variable_name="history"),
-                    ("human", "{question}"),
-                ]) | llm
                 try:
-                    resposta = chain.invoke({"history": historico, "question": pergunta})
-                    conteudo = resposta.content
+                    if imagens:
+                        # Caminho com imagem(ns): usa o modelo de visão direto via Groq
+                        content_msgs = [{"type": "text", "text": prompt_final}]
+                        for img in imagens:
+                            content_msgs.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{img['mime']};base64,{img['data']}"},
+                            })
+                        resposta = groq_client.chat.completions.create(
+                            model=VISION_MODEL,
+                            messages=[
+                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "user", "content": content_msgs},
+                            ],
+                        )
+                        conteudo = resposta.choices[0].message.content
+                    else:
+                        # Caminho normal (texto e/ou documentos): usa o chat com histórico
+                        historico = []
+                        for msg in st.session_state.messages[:-1]:
+                            if msg["role"] == "user":
+                                historico.append(HumanMessage(content=msg["content"]))
+                            else:
+                                historico.append(AIMessage(content=msg["content"]))
+
+                        chain = ChatPromptTemplate.from_messages([
+                            ("system", SYSTEM_PROMPT),
+                            MessagesPlaceholder(variable_name="history"),
+                            ("human", "{question}"),
+                        ]) | llm
+                        resposta = chain.invoke({"history": historico, "question": prompt_final})
+                        conteudo = resposta.content
                 except Exception as e:
                     conteudo = f"❌ Erro: {e}"
 
@@ -502,8 +648,8 @@ if st.session_state.current_conversation_id:
             save_current_conversation()
             st.markdown(f"""
             <div class='message-row nexus'>
-            <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
-            <div class='bubble bubble-nexus'>{conteudo}</div>
+                <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;"></div>
+                <div class='bubble bubble-nexus'>{conteudo}</div>
             </div>""", unsafe_allow_html=True)
             st.rerun()
         
