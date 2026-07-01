@@ -380,6 +380,9 @@ if "conversations" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "tom" not in st.session_state:
+    st.session_state.tom = "informal"
+
 def create_new_conversation():
     """Criar nova conversa"""
     conversation_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -550,11 +553,29 @@ groq_client = get_groq_client()
 # Modelo com suporte a visão (fotos)
 VISION_MODEL = "qwen/qwen3.6-27b"
 
-SYSTEM_PROMPT = """Você é o Nexus IA, um assistente de inteligência artificial avançado, inteligente e amigável.
-Responda sempre em português do Brasil, de forma clara, natural e envolvente.
+SYSTEM_PROMPT_BASE = """Você é o Nexus IA, um assistente de inteligência artificial avançado e inteligente.
 Você pode ajudar com qualquer assunto: perguntas gerais, criatividade, tecnologia, conselhos,
-redação, análise, programação, dúvidas do dia a dia e muito mais.
+redação, análise, programação, dúvidas do dia a dia e muito mais."""
+
+SYSTEM_PROMPT_INFORMAL = SYSTEM_PROMPT_BASE + """
+Responda sempre em português do Brasil, de forma clara, natural, descontraída e envolvente.
 Seja direto, útil e use uma linguagem acessível. Use emojis com moderação quando ficarem naturais."""
+
+SYSTEM_PROMPT_FORMAL = SYSTEM_PROMPT_BASE + """
+Responda sempre em português do Brasil, em tom FORMAL e profissional: linguagem cuidada e objetiva,
+sem gírias, sem emojis, frases completas, como em um ambiente corporativo/institucional."""
+
+def montar_system_prompt():
+    return SYSTEM_PROMPT_FORMAL if st.session_state.tom == "formal" else SYSTEM_PROMPT_INFORMAL
+
+def detectar_comando_tom(texto):
+    """Detecta se a mensagem é um comando para trocar o tom (formal/informal)"""
+    texto_limpo = re.sub(r'[.!?]+$', '', (texto or "").strip().lower())
+    if re.fullmatch(r'(ativar\s+)?modo\s+formal', texto_limpo):
+        return "formal"
+    if re.fullmatch(r'(ativar\s+)?modo\s+informal', texto_limpo):
+        return "informal"
+    return None
 
 # ─────────────────────────────────────────────
 # Funções de extração de arquivos
@@ -738,9 +759,17 @@ if st.session_state.current_conversation_id:
             with st.spinner(""):
                 is_image_flag = False
                 try:
+                    comando_tom = detectar_comando_tom(pergunta)
                     pedido_imagem = eh_pedido_de_imagem(pergunta)
 
-                    if pedido_imagem and imagens:
+                    if comando_tom:
+                        st.session_state.tom = comando_tom
+                        if comando_tom == "formal":
+                            conteudo = "✅ Modo **formal** ativado. A partir de agora, responderei de forma profissional e objetiva."
+                        else:
+                            conteudo = "✅ Modo **informal** ativado! A partir de agora vou responder de um jeito mais leve e descontraído 😊"
+
+                    elif pedido_imagem and imagens:
                         # Recriar/gerar uma nova imagem a partir de uma foto anexada:
                         # 1) descreve a foto com o modelo de visão, 2) gera a nova imagem
                         content_msgs = [
@@ -780,7 +809,7 @@ if st.session_state.current_conversation_id:
                         resposta = groq_client.chat.completions.create(
                             model=VISION_MODEL,
                             messages=[
-                                {"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "system", "content": montar_system_prompt()},
                                 {"role": "user", "content": content_msgs},
                             ],
                             reasoning_effort="none",
@@ -797,7 +826,7 @@ if st.session_state.current_conversation_id:
                                 historico.append(AIMessage(content=msg["content"]))
 
                         chain = ChatPromptTemplate.from_messages([
-                            ("system", SYSTEM_PROMPT),
+                            ("system", montar_system_prompt()),
                             MessagesPlaceholder(variable_name="history"),
                             ("human", "{question}"),
                         ]) | llm
