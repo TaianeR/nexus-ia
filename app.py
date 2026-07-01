@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="Nexus IA – Seu Assistente Inteligente",
     page_icon="✦",
     layout="centered",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────
