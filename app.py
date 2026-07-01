@@ -193,6 +193,15 @@ st.markdown("""
     <p class="nexus-subtitle">Inteligência Artificial · Sempre pronto para te ajudar</p>
 </div>
 """, unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown("### ✦ Nexus IA")
+    st.caption("Seu assistente inteligente")
+    st.divider()
+    if st.button("🗑️ Nova conversa", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+    st.divider()
+    st.caption("Desenvolvido com Streamlit + Groq")
 
 # ─────────────────────────────────────────────
 # Carregar API Key
