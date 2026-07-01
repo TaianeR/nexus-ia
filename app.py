@@ -464,7 +464,7 @@ if st.session_state.current_conversation_id:
             else:
                 st.markdown(f"""
                 <div class='message-row nexus'>
-                    <div class='avatar avatar-nexus'>✦</div>
+                    <div class='avatar avatar-nexus'><img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
                     <div class='bubble bubble-nexus'>{msg['content']}</div>
                 </div>""", unsafe_allow_html=True)
 
