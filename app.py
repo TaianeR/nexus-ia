@@ -40,18 +40,61 @@ st.markdown("""
     }
 
     [data-testid="stSidebarContent"] {
-        padding: 1.5rem 0.5rem;
+        padding: 0.5rem 0.5rem;
     }
 
-    .sidebar-title {
-        font-size: 1.3rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #a78bfa, #818cf8);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 1.5rem;
-        text-align: center;
+    .sidebar-logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #0f0f1e;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin: 1rem auto 1.5rem auto;
+        box-shadow: 0 0 30px rgba(139, 92, 246, 0.4), 0 0 60px rgba(99, 102, 241, 0.15);
+        animation: pulse-glow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 30px rgba(139,92,246,0.4), 0 0 60px rgba(99,102,241,0.15); }
+        50%       { box-shadow: 0 0 45px rgba(139,92,246,0.6), 0 0 90px rgba(99,102,241,0.25); }
+    }
+
+    .sidebar-logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .sidebar-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+    }
+
+    .menu-button {
+        background: #0f1434;
+        border: 1px solid #1e1e3f;
+        color: #94a3b8;
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-align: left;
+        width: 100%;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .menu-button:hover {
+        background: #1a1f3a;
+        border-color: #6366f1;
+        color: #cbd5e1;
     }
 
     .conversation-item {
@@ -111,11 +154,6 @@ st.markdown("""
         margin-bottom: 1rem;
         box-shadow: 0 0 40px rgba(139, 92, 246, 0.5), 0 0 80px rgba(99, 102, 241, 0.2);
         animation: pulse-glow 3s ease-in-out infinite;
-    }
-
-    @keyframes pulse-glow {
-        0%, 100% { box-shadow: 0 0 40px rgba(139,92,246,0.5), 0 0 80px rgba(99,102,241,0.2); }
-        50%       { box-shadow: 0 0 60px rgba(139,92,246,0.8), 0 0 120px rgba(99,102,241,0.4); }
     }
 
     .nexus-title {
@@ -215,25 +253,6 @@ st.markdown("""
 
     .stSpinner > div { border-top-color: #8b5cf6 !important; }
 
-    .suggestion-chip {
-        display: inline-block;
-        background: #0f0f1e;
-        border: 1px solid #1e1e3f;
-        border-radius: 20px;
-        padding: 7px 15px;
-        font-size: 0.82rem;
-        color: #94a3b8;
-        margin: 4px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .suggestion-chip:hover {
-        border-color: #6366f1;
-        color: #a78bfa;
-        background: rgba(99, 102, 241, 0.1);
-    }
-
     .stButton > button {
         background: transparent;
         border: 1px solid #1e1e3f;
@@ -265,7 +284,7 @@ st.markdown("""
     }
 
     .history-header {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: #64748b;
         text-transform: uppercase;
@@ -277,9 +296,9 @@ st.markdown("""
 
     .empty-state {
         text-align: center;
-        padding: 2rem 1rem;
+        padding: 1rem;
         color: #475569;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -351,18 +370,29 @@ api_key = (
 # Sidebar
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("<div class='sidebar-title'>✦ Nexus IA</div>", unsafe_allow_html=True)
+    # Logo no topo
+    st.markdown("""
+    <div class="sidebar-logo">
+        <img src="https://raw.githubusercontent.com/TaianeR/nexus-ia/main/logo.png" style="width:100%;height:100%;object-fit:cover;">
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Botão nova conversa
-    if st.button("➕ Nova Conversa", use_container_width=True):
-        create_new_conversation()
+    # Menu Principal
+    st.markdown('<div class="sidebar-menu">', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([0.85, 0.15])
+    with col1:
+        if st.button("➕ Nova Conversa", use_container_width=True):
+            create_new_conversation()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     st.divider()
     
     # Histórico de conversas
+    st.markdown("<div class='history-header'>📋 Histórico</div>", unsafe_allow_html=True)
+    
     if st.session_state.conversations:
-        st.markdown("<div class='history-header'>📋 Histórico</div>", unsafe_allow_html=True)
-        
         # Ordenar conversas por data decrescente
         sorted_conversations = sorted(
             st.session_state.conversations.items(),
@@ -374,8 +404,6 @@ with st.sidebar:
             col1, col2 = st.columns([0.85, 0.15])
             
             with col1:
-                is_active = conv_id == st.session_state.current_conversation_id
-                active_class = "active" if is_active else ""
                 if st.button(
                     f"💬 {conv_data['title']}",
                     key=f"conv_{conv_id}",
@@ -384,10 +412,18 @@ with st.sidebar:
                     load_conversation(conv_id)
             
             with col2:
-                if st.button("🗑️", key=f"del_{conv_id}", help="Deletar"):
+                if st.button("🗑️", key=f"del_{conv_id}", help="Deletar", use_container_width=True):
                     delete_conversation(conv_id)
     else:
-        st.markdown("<div class='empty-state'>Nenhuma conversa ainda.<br>Comece uma nova! 👋</div>", unsafe_allow_html=True)
+        st.markdown("<div class='empty-state'>Nenhuma conversa ainda</div>", unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Projetos
+    st.markdown("<div class='history-header'>📁 Projetos</div>", unsafe_allow_html=True)
+    
+    if st.button("🚀 Meus Projetos", use_container_width=True):
+        st.info("Seção de Projetos em desenvolvimento")
     
     st.divider()
     st.caption("🚀 Desenvolvido com Streamlit + Groq")
@@ -411,8 +447,6 @@ with col2:
         # Criar primeira conversa
         if st.button("Começar Conversa", use_container_width=True, key="start_conv"):
             create_new_conversation()
-    else:
-        st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # Validar API Key
@@ -447,22 +481,6 @@ Seja direto, útil e use uma linguagem acessível. Use emojis com moderação qu
 # ─────────────────────────────────────────────
 if st.session_state.current_conversation_id:
     with col2:
-        # Sugestões iniciais
-        if not st.session_state.messages:
-            st.markdown("""
-            <div style='text-align:center; padding: 1rem 0 1.5rem 0; color:#334155; font-size:0.85rem; letter-spacing:0.05em;'>
-                EXPERIMENTE PERGUNTAR
-            </div>
-            <div style='text-align:center; margin-bottom: 2rem;'>
-                <span class='suggestion-chip'>✍️ Escreva um texto para mim</span><br>
-                <span class='suggestion-chip'>💡 Me dê uma ideia criativa</span><br>
-                <span class='suggestion-chip'>🔧 Ajude com tecnologia</span><br>
-                <span class='suggestion-chip'>📚 Explique um conceito</span><br>
-                <span class='suggestion-chip'>🌍 Traduza algo</span><br>
-                <span class='suggestion-chip'>🤔 Me aconselhe</span>
-            </div>
-            """, unsafe_allow_html=True)
-
         # Renderizar histórico
         for msg in st.session_state.messages:
             if msg["role"] == "user":
