@@ -1,5 +1,4 @@
 # Nexus IA 🤖
-# ✦ Nexus IA
 
 Assistente de inteligência artificial desenvolvido com **Streamlit**, **Groq** e **Supabase**, com login por e-mail, histórico de conversas permanente, geração de imagens, leitura de documentos e pesquisa em tempo real na web.
 
