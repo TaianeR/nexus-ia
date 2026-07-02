@@ -1,7 +1,0 @@
-streamlit
-langchain-groq
-langchain-core
-groq
-pypdf
-python-docx
-reportlab
