@@ -16,6 +16,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+from duckduckgo_search import DDGS  # Nova dependência para pesquisa web
 
 # ─────────────────────────────────────────────
 # Configuração da Página
@@ -658,6 +659,24 @@ def gerar_imagem(prompt):
     return f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=768&height=768&nologo=true&seed={semente}"
 
 # ─────────────────────────────────────────────
+# Função de Pesquisa Web via DuckDuckGo
+# ─────────────────────────────────────────────
+def pesquisar_na_web(termo_busca, max_resultados=3):
+    """Realiza uma busca rápida na internet e retorna os resultados estruturados"""
+    try:
+        with DDGS() as ddgs:
+            resultados = [r for r in ddgs.text(termo_busca, max_results=max_resultados)]
+            if not resultados:
+                return ""
+            
+            contexto = "\n\n--- INFORMAÇÕES PESQUISADAS EM TEMPO REAL NA WEB ---\n"
+            for r in resultados:
+                contexto += f"Título: {r['title']}\nLink: {r['href']}\nResumo: {r['body']}\n\n"
+            return contexto
+    except Exception:
+        return ""
+
+# ─────────────────────────────────────────────
 # Geração de relatório em PDF
 # ─────────────────────────────────────────────
 def limpar_pensamento(texto):
@@ -771,7 +790,6 @@ if st.session_state.current_conversation_id:
 
                     elif pedido_imagem and imagens:
                         # Recriar/gerar uma nova imagem a partir de uma foto anexada:
-                        # 1) descreve a foto com o modelo de visão, 2) gera a nova imagem
                         content_msgs = [
                             {"type": "text", "text": "Descreva esta imagem em detalhes, em inglês, em uma única frase, para ser usada como prompt de um gerador de imagens."}
                         ]
@@ -793,7 +811,7 @@ if st.session_state.current_conversation_id:
                         is_image_flag = True
 
                     elif pedido_imagem and not arquivos:
-                        # Pedido de geração de imagem do zero (gratuito, via Pollinations.ai)
+                        # Pedido de geração de imagem do zero
                         url_imagem = gerar_imagem(pergunta)
                         conteudo = f'<img class="generated-img" src="{url_imagem}">'
                         is_image_flag = True
@@ -825,12 +843,28 @@ if st.session_state.current_conversation_id:
                             else:
                                 historico.append(AIMessage(content=msg["content"]))
 
+                        # --- INTEGRAÇÃO WEB SEARCH ---
+                        # Gatilhos comuns que pedem informações em tempo real ou atualizadas
+                        indicadores_busca = ["hoje", "noticia", "notícia", "quem é", "quem foi", "resultado", "jogo", "atual", "tempo", "clima", "preço", "dolar", "euro", "últimas", "ultimas", "pesquise", "busca"]
+                        contexto_web = ""
+                        
+                        if any(palavra in pergunta.lower() for palavra in indicadores_busca):
+                            with st.spinner("🔍 Pesquisando na internet por informações atualizadas..."):
+                                termo_filtrado = re.sub(r'\b(pesquise|procure|busque|no google|na internet|sobre)\b', '', pergunta, flags=re.IGNORECASE).strip()
+                                contexto_web = pesquisar_na_web(termo_filtrado if termo_filtrado else pergunta)
+                        
+                        # Injeta os dados da web temporariamente no prompt
+                        prompt_com_web = prompt_final
+                        if contexto_web:
+                            prompt_com_web += f"\n\nUse estas informações coletadas da internet em tempo real caso sejam relevantes:\n{contexto_web}"
+                        # ─────────────────────────────
+
                         chain = ChatPromptTemplate.from_messages([
                             ("system", montar_system_prompt()),
                             MessagesPlaceholder(variable_name="history"),
                             ("human", "{question}"),
                         ]) | llm
-                        resposta = chain.invoke({"history": historico, "question": prompt_final})
+                        resposta = chain.invoke({"history": historico, "question": prompt_com_web})
                         conteudo = resposta.content
                 except Exception as e:
                     conteudo = f"❌ Erro: {e}"
