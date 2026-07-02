@@ -1,9 +1,0 @@
-streamlit
-groq
-langchain-groq
-langchain-core
-pypdf
-python-docx
-reportlab
-duckduckgo-search
-supabase
