@@ -88,4 +88,4 @@ requirements.txt       → dependências Python
 
 ## 👩‍💻 Autora
 
-Desenvolvido por **Taiane Ribas da Silveira** — TCell Assistência Técnica.
+Desenvolvido por **Taiane Ribas da Silveira**
