@@ -5,5 +5,4 @@ langchain-core
 pypdf
 python-docx
 reportlab
-duckduckgo-search
 supabase>=2.15.0
