@@ -1,8 +1,4 @@
 streamlit
-groq
 langchain-groq
 langchain-core
-pypdf
-python-docx
-reportlab
-supabase>=2.15.0
+groq
