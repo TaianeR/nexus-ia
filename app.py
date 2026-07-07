@@ -422,46 +422,52 @@ def baixar_imagem_bytes(url):
 # ─────────────────────────────────────────────
 # Pesquisa Web via DuckDuckGo
 # ─────────────────────────────────────────────
+def _chamar_modelo_busca(model, termo_busca):
+    return groq_client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Pesquise na web e responda apenas com os fatos encontrados, "
+                    "de forma objetiva e resumida, incluindo datas e números quando existirem."
+                ),
+            },
+            {"role": "user", "content": termo_busca},
+        ],
+    )
+
+
 def pesquisar_na_web(termo_busca, max_resultados=3):
-    """Busca informações atuais na web usando o modelo compound da Groq
-    (tem busca na web embutida, sem precisar de outra API)."""
-    try:
-        resposta = groq_client.chat.completions.create(
-            model="groq/compound",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Pesquise na web e responda apenas com os fatos encontrados, "
-                        "de forma objetiva e resumida, incluindo datas e números quando existirem."
-                    ),
-                },
-                {"role": "user", "content": termo_busca},
-            ],
-        )
-        conteudo = resposta.choices[0].message.content
-        if not conteudo:
+    """Busca informações atuais na web usando os modelos compound da Groq
+    (têm busca na web embutida, sem precisar de outra API).
+    Tenta o groq/compound primeiro; se falhar (ex.: erro 413 pontual da Groq),
+    cai automaticamente para o groq/compound-mini."""
+    ultimo_erro = None
+    for modelo in ("groq/compound", "groq/compound-mini"):
+        try:
+            resposta = _chamar_modelo_busca(modelo, termo_busca)
+            conteudo = resposta.choices[0].message.content
+            if not conteudo:
+                ultimo_erro = f"{modelo}: resposta sem texto em message.content"
+                continue
             st.session_state.debug_web = {
-                "status": "vazio",
+                "status": "ok",
+                "modelo_usado": modelo,
                 "termo": termo_busca,
-                "detalhe": "A API respondeu, mas sem texto em message.content.",
+                "preview": conteudo[:300],
             }
-            return ""
-        st.session_state.debug_web = {
-            "status": "ok",
-            "termo": termo_busca,
-            "preview": conteudo[:300],
-        }
-        return f"\n\n--- INFORMAÇÕES PESQUISADAS EM TEMPO REAL NA WEB ---\n{conteudo}\n"
-    except Exception as e:
-        st.session_state.debug_web = {
-            "status": "erro",
-            "termo": termo_busca,
-            "detalhe": str(e),
-        }
-        return ""
-    except Exception:
-        return ""
+            return f"\n\n--- INFORMAÇÕES PESQUISADAS EM TEMPO REAL NA WEB ---\n{conteudo}\n"
+        except Exception as e:
+            ultimo_erro = f"{modelo}: {e}"
+            continue
+
+    st.session_state.debug_web = {
+        "status": "erro",
+        "termo": termo_busca,
+        "detalhe": ultimo_erro,
+    }
+    return ""
 
 # ─────────────────────────────────────────────
 # Relatório em PDF
