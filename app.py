@@ -420,54 +420,64 @@ def baixar_imagem_bytes(url):
         return None
 
 # ─────────────────────────────────────────────
-# Pesquisa Web via DuckDuckGo
+# Pesquisa Web via Tavily
 # ─────────────────────────────────────────────
-def _chamar_modelo_busca(model, termo_busca):
-    return groq_client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Pesquise na web e responda apenas com os fatos encontrados, "
-                    "de forma objetiva e resumida, incluindo datas e números quando existirem."
-                ),
-            },
-            {"role": "user", "content": termo_busca},
-        ],
-    )
-
+TAVILY_API_KEY = st.secrets.get("TAVILY_API_KEY", os.environ.get("TAVILY_API_KEY", ""))
 
 def pesquisar_na_web(termo_busca, max_resultados=3):
-    """Busca informações atuais na web usando os modelos compound da Groq
-    (têm busca na web embutida, sem precisar de outra API).
-    Tenta o groq/compound primeiro; se falhar (ex.: erro 413 pontual da Groq),
-    cai automaticamente para o groq/compound-mini."""
-    ultimo_erro = None
-    for modelo in ("groq/compound", "groq/compound-mini"):
-        try:
-            resposta = _chamar_modelo_busca(modelo, termo_busca)
-            conteudo = resposta.choices[0].message.content
-            if not conteudo:
-                ultimo_erro = f"{modelo}: resposta sem texto em message.content"
-                continue
-            st.session_state.debug_web = {
-                "status": "ok",
-                "modelo_usado": modelo,
-                "termo": termo_busca,
-                "preview": conteudo[:300],
-            }
-            return f"\n\n--- INFORMAÇÕES PESQUISADAS EM TEMPO REAL NA WEB ---\n{conteudo}\n"
-        except Exception as e:
-            ultimo_erro = f"{modelo}: {e}"
-            continue
+    """Busca informações atuais na web usando a API da Tavily
+    (mais estável do que o groq/compound, que anda instável no momento)."""
+    if not TAVILY_API_KEY:
+        st.session_state.debug_web = {
+            "status": "erro",
+            "termo": termo_busca,
+            "detalhe": "TAVILY_API_KEY não configurada em Settings → Secrets do Streamlit Cloud.",
+        }
+        return ""
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": TAVILY_API_KEY,
+                "query": termo_busca,
+                "search_depth": "basic",
+                "max_results": max_resultados,
+                "include_answer": True,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        dados = resp.json()
 
-    st.session_state.debug_web = {
-        "status": "erro",
-        "termo": termo_busca,
-        "detalhe": ultimo_erro,
-    }
-    return ""
+        partes = []
+        if dados.get("answer"):
+            partes.append(f"Resumo: {dados['answer']}")
+        for r in dados.get("results", [])[:max_resultados]:
+            partes.append(f"Título: {r.get('title', '')}\nLink: {r.get('url', '')}\nResumo: {r.get('content', '')[:500]}")
+
+        if not partes:
+            st.session_state.debug_web = {
+                "status": "vazio",
+                "termo": termo_busca,
+                "detalhe": "Tavily respondeu, mas sem resultados úteis.",
+            }
+            return ""
+
+        conteudo = "\n\n".join(partes)
+        st.session_state.debug_web = {
+            "status": "ok",
+            "termo": termo_busca,
+            "preview": conteudo[:300],
+        }
+        return f"\n\n--- INFORMAÇÕES PESQUISADAS EM TEMPO REAL NA WEB ---\n{conteudo}\n"
+    except Exception as e:
+        st.session_state.debug_web = {
+            "status": "erro",
+            "termo": termo_busca,
+            "detalhe": str(e),
+        }
+        return ""
+
 
 # ─────────────────────────────────────────────
 # Relatório em PDF
