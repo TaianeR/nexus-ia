@@ -298,6 +298,11 @@ with st.sidebar:
     st.divider()
     st.caption("🚀 Desenvolvido com Streamlit + Groq + Supabase")
 
+    # Painel temporário de diagnóstico da busca web (remover depois que estiver 100% ok)
+    if st.session_state.get("debug_web"):
+        with st.expander("🔍 Diagnóstico da última busca web"):
+            st.json(st.session_state.debug_web)
+
 # ─────────────────────────────────────────────
 # Modelos Groq
 # ─────────────────────────────────────────────
@@ -436,8 +441,25 @@ def pesquisar_na_web(termo_busca, max_resultados=3):
         )
         conteudo = resposta.choices[0].message.content
         if not conteudo:
+            st.session_state.debug_web = {
+                "status": "vazio",
+                "termo": termo_busca,
+                "detalhe": "A API respondeu, mas sem texto em message.content.",
+            }
             return ""
+        st.session_state.debug_web = {
+            "status": "ok",
+            "termo": termo_busca,
+            "preview": conteudo[:300],
+        }
         return f"\n\n--- INFORMAÇÕES PESQUISADAS EM TEMPO REAL NA WEB ---\n{conteudo}\n"
+    except Exception as e:
+        st.session_state.debug_web = {
+            "status": "erro",
+            "termo": termo_busca,
+            "detalhe": str(e),
+        }
+        return ""
     except Exception:
         return ""
 
